@@ -219,8 +219,8 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
         # cluster_ids     [n_words]
         words, cluster_ids = self.we(doc, self._bertify(doc))
 
-        top_rough_scores = []
-        top_indices = []
+        top_rough_scores = torch.zeros(len(words))
+        top_indices = torch.zeros(len(words))
         if windows_size == 0 or len(words) < windows_size:
             top_rough_scores, top_indices = self.rough_scorer(words)
         else:
@@ -233,10 +233,9 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 # top_indices       [windows_size, n_ants]
                 window_top_rough_scores, window_top_indices = self.rough_scorer(words[window_start:window_end])
 
-                for j, rough_score in enumerate(window_top_rough_scores):
-                    if window_top_rough_scores[j] > top_rough_scores[idx + j]:
-                        top_rough_scores[idx + j] = window_top_rough_scores[j]
-                        top_indices[idx + j] = window_top_indices[j]
+                more_mask = torch.where(window_top_rough_scores > top_rough_scores[idx:idx+windows_size])[0]
+                top_rough_scores[more_mask + idx] = window_top_rough_scores[more_mask]
+                top_indices[more_mask + idx] = window_top_indices[more_mask]
 
         # Get pairwise features [n_words, n_ants, n_pw_features]
         pw = self.pw(top_indices, doc)
