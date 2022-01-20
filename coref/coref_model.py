@@ -220,7 +220,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
         words, cluster_ids = self.we(doc, self._bertify(doc))
 
         top_rough_scores = torch.zeros((len(words), self.config.rough_k)).to(self.config.device)
-        top_indices = torch.zeros((len(words), self.config.rough_k)).to(self.config.device)
+        top_indices = torch.zeros((len(words), self.config.rough_k)).to(self.config.device).to(torch.long)
         if windows_size == 0 or len(words) < windows_size:
             top_rough_scores, top_indices = self.rough_scorer(words)
         else:
@@ -234,10 +234,10 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 window_top_rough_scores, window_top_indices = self.rough_scorer(words[window_start:window_end])
 
                 concated = torch.hstack((window_top_rough_scores, top_rough_scores[idx:idx+windows_size]))
-                concated_indices = torch.hstack((window_top_indices, top_indices[idx:idx+windows_size]))
+                concated_indices = torch.hstack((window_top_indices + idx, top_indices[idx:idx+windows_size]))
                 topk = torch.topk(concated, window_top_rough_scores.shape[1], dim=1)
                 top_rough_scores[idx:idx + windows_size] = topk.values
-                top_indices[idx:idx + windows_size] = torch.gather(concated_indices, 1, topk.indices) + idx
+                top_indices[idx:idx + windows_size] = torch.gather(concated_indices, 1, topk.indices)
 
         # Get pairwise features [n_words, n_ants, n_pw_features]
         pw = self.pw(top_indices, doc)
