@@ -234,9 +234,9 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 window_top_rough_scores, window_top_indices = self.rough_scorer(words[window_start:window_end])
 
                 concated = torch.hstack((window_top_rough_scores, top_rough_scores[idx:idx+windows_size]))
-                topk = torch.topk(concated, window_top_indices.shape[1], dim=1)
+                topk = torch.topk(concated, window_top_rough_scores.shape[1], dim=1)
                 top_rough_scores[idx:idx + windows_size] = topk.values
-                top_indices[idx:idx + windows_size] = torch.gather(window_top_indices, 1, topk.indices)
+                top_indices[idx:idx + windows_size] = torch.gather(window_top_indices, 1, topk.indices) + idx
 
         # Get pairwise features [n_words, n_ants, n_pw_features]
         pw = self.pw(top_indices, doc)
