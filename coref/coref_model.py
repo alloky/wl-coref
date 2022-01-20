@@ -201,6 +201,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
 
     def run(self,  # pylint: disable=too-many-locals
             doc: Doc,
+            windows_size: int = 0
             ) -> CorefResult:
         """
         This is a massive method, but it made sense to me to not split it into
@@ -208,6 +209,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
 
         Args:
             doc (Doc): a dictionary with the document data.
+            windows_size: if > 0 then windowed scoring is used
 
         Returns:
             CorefResult (see const.py)
@@ -217,10 +219,24 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
         # cluster_ids     [n_words]
         words, cluster_ids = self.we(doc, self._bertify(doc))
 
-        # Obtain bilinear scores and leave only top-k antecedents for each word
-        # top_rough_scores  [n_words, n_ants]
-        # top_indices       [n_words, n_ants]
-        top_rough_scores, top_indices = self.rough_scorer(words)
+        if windows_size == 0:
+            windows_size = len(words)
+
+        top_rough_scores = []
+        top_indices = []
+        for idx in range(len(words) - windows_size):
+            window_start = idx
+            window_end = idx + windows_size
+
+            # Obtain bilinear scores and leave only top-k antecedents for each word
+            # top_rough_scores  [windows_size, n_ants]
+            # top_indices       [windows_size, n_ants]
+            window_top_rough_scores, window_top_indices = self.rough_scorer(words[window_start:window_end])
+
+            for j, rough_score in enumerate(window_top_rough_scores):
+                if window_top_rough_scores[j] > top_rough_scores[idx + j]:
+                    top_rough_scores[idx + j] = window_top_rough_scores[j]
+                    top_indices[idx + j] = window_top_indices[j]
 
         # Get pairwise features [n_words, n_ants, n_pw_features]
         pw = self.pw(top_indices, doc)
