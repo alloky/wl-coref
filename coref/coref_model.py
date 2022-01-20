@@ -201,7 +201,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
 
     def run(self,  # pylint: disable=too-many-locals
             doc: Doc,
-            windows_size: int = 0
+            windows_size: int = 80
             ) -> CorefResult:
         """
         This is a massive method, but it made sense to me to not split it into
@@ -233,9 +233,10 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 # top_indices       [windows_size, n_ants]
                 window_top_rough_scores, window_top_indices = self.rough_scorer(words[window_start:window_end])
 
-                more_mask = torch.where(window_top_rough_scores > top_rough_scores[idx:idx+windows_size])[0]
-                top_rough_scores[more_mask + idx] = window_top_rough_scores[more_mask]
-                top_indices[more_mask + idx] = window_top_indices[more_mask]
+                concated = torch.hstack(window_top_rough_scores, top_rough_scores[idx:idx+windows_size])
+                topk = torch.topk(concated, window_top_indices.shape[1], dim=1)
+                top_rough_scores[idx:idx + windows_size] = topk.values
+                top_indices[idx:idx + windows_size] = torch.gather(window_top_indices, 1, topk.indices)
 
         # Get pairwise features [n_words, n_ants, n_pw_features]
         pw = self.pw(top_indices, doc)
