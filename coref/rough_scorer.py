@@ -72,11 +72,14 @@ class IncrementalRoughScorer(torch.nn.Module):
         self.dropout = torch.nn.Dropout(config.dropout_rate)
         self.bilinear = torch.nn.Linear(features, features)
 
+        self.pair_mask = None
+
         self.k = config.rough_k
 
     def forward(self,  # type: ignore  # pylint: disable=arguments-differ  #35566 in pytorch
                 mentions: torch.Tensor,
-                first: bool
+                first: bool,
+                window_size: int,
                 ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Returns rough anaphoricity scores for candidates, which consist of
@@ -84,25 +87,22 @@ class IncrementalRoughScorer(torch.nn.Module):
         """
         # [n_mentions, n_mentions]
         if first:
-            pair_mask = torch.arange(mentions.shape[0])
-            pair_mask = pair_mask.unsqueeze(1) - pair_mask.unsqueeze(0)
-            pair_mask = torch.log((pair_mask > 0).to(torch.float))
-            pair_mask = pair_mask.to(mentions.device)
+            if window_size == mentions.shape[0] and self.pair_mask is None:
+                pair_mask = torch.arange(mentions.shape[0])
+                pair_mask = pair_mask.unsqueeze(1) - pair_mask.unsqueeze(0)
+                pair_mask = torch.log((pair_mask > 0).to(torch.float))
+                pair_mask = pair_mask.to(mentions.device)
+                self.pair_mask = pair_mask
 
             self.window_scores = self.dropout(self.bilinear(mentions))
 
             bilinear_scores = self.window_scores.mm(mentions.T)
             self.bilinear_scores = bilinear_scores
 
-            rough_scores = pair_mask + bilinear_scores
+            rough_scores = self.pair_mask + bilinear_scores
 
             return self._prune(rough_scores)
         else:
-            pair_mask = torch.arange(mentions.shape[0])
-            pair_mask = pair_mask.unsqueeze(1) - pair_mask.unsqueeze(0)
-            pair_mask = torch.log((pair_mask > 0).to(torch.float))
-            pair_mask = pair_mask.to(mentions.device)
-
             # [1, features]
             new_mention_scores = self.dropout(self.bilinear(mentions[-1, :]))
 
@@ -123,7 +123,7 @@ class IncrementalRoughScorer(torch.nn.Module):
             # [window_size, window_size]
             self.bilinear_scores = torch.vstack((self.bilinear_scores[1:, :], new_bilinear_scores))
 
-            rough_scores = pair_mask + self.bilinear_scores
+            rough_scores = self.pair_mask + self.bilinear_scores
 
             return self._prune(rough_scores)
 
