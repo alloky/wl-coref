@@ -21,7 +21,7 @@ from coref.config import Config
 from coref.const import CorefResult, Doc
 from coref.loss import CorefLoss
 from coref.pairwise_encoder import PairwiseEncoder
-from coref.rough_scorer import RoughScorer
+from coref.rough_scorer import IncrementalRoughScorer
 from coref.span_predictor import SpanPredictor
 from coref.tokenizer_customization import TOKENIZER_FILTERS, TOKENIZER_MAPS
 from coref.utils import GraphNode
@@ -201,7 +201,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
 
     def run(self,  # pylint: disable=too-many-locals
             doc: Doc,
-            windows_size: int = 80
+            windows_size: int = 400
             ) -> CorefResult:
         """
         This is a massive method, but it made sense to me to not split it into
@@ -219,7 +219,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
         # cluster_ids     [n_words]
         words, cluster_ids = self.we(doc, self._bertify(doc))
 
-        top_rough_scores = torch.zeros((len(words), self.config.rough_k)).to(self.config.device) - 1000
+        top_rough_scores = torch.zeros((len(words), self.config.rough_k)).to(self.config.device) - 1000000
         top_indices = torch.zeros((len(words), self.config.rough_k)).to(self.config.device).to(torch.long)
         if windows_size == 0 or len(words) < windows_size:
             top_rough_scores, top_indices = self.rough_scorer(words)
@@ -382,7 +382,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
         # pylint: disable=line-too-long
         self.a_scorer = AnaphoricityScorer(pair_emb, self.config).to(self.config.device)
         self.we = WordEncoder(bert_emb, self.config).to(self.config.device)
-        self.rough_scorer = RoughScorer(bert_emb, self.config).to(self.config.device)
+        self.rough_scorer = IncrementalRoughScorer(bert_emb, self.config).to(self.config.device)
         self.sp = SpanPredictor(bert_emb, self.config.sp_embedding_size).to(self.config.device)
 
         self.trainable: Dict[str, torch.nn.Module] = {
