@@ -116,7 +116,7 @@ class IncrementalRoughScorer(torch.nn.Module):
             new_bilinear_scores = torch.cat(
                 (
                     new_bilinear_scores,
-                    torch.Tensor([-torch.inf])
+                    torch.Tensor([-torch.inf]).to(mentions.device)
                 )
             )
 
