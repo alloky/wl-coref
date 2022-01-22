@@ -235,7 +235,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                     words[window_start:window_end],
                     first=(idx == 0)
                 )
-                
+
                 concated = torch.hstack((window_top_rough_scores, top_rough_scores[idx:idx+windows_size]))
                 concated_indices = torch.hstack((window_top_indices + idx, top_indices[idx:idx+windows_size]))
                 topk = torch.topk(concated, window_top_rough_scores.shape[1], dim=1)
