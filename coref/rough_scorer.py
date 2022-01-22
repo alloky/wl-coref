@@ -100,7 +100,7 @@ class IncrementalRoughScorer(torch.nn.Module):
                 pair_mask = pair_mask.unsqueeze(1) - pair_mask.unsqueeze(0)
                 pair_mask = torch.log((pair_mask > 0).to(torch.float))
                 curr_pair_mask = pair_mask.to(mentions.device)
-                
+
             self.window_scores = self.dropout(self.bilinear(mentions))
 
             bilinear_scores = self.window_scores.mm(mentions.T)
