@@ -87,19 +87,26 @@ class IncrementalRoughScorer(torch.nn.Module):
         """
         # [n_mentions, n_mentions]
         if first:
+            curr_pair_mask = None
             if window_size == mentions.shape[0] and self.pair_mask is None:
                 pair_mask = torch.arange(mentions.shape[0])
                 pair_mask = pair_mask.unsqueeze(1) - pair_mask.unsqueeze(0)
                 pair_mask = torch.log((pair_mask > 0).to(torch.float))
                 pair_mask = pair_mask.to(mentions.device)
                 self.pair_mask = pair_mask
-
+                curr_pair_mask = self.pair_mask
+            else:
+                pair_mask = torch.arange(mentions.shape[0])
+                pair_mask = pair_mask.unsqueeze(1) - pair_mask.unsqueeze(0)
+                pair_mask = torch.log((pair_mask > 0).to(torch.float))
+                curr_pair_mask = pair_mask.to(mentions.device)
+                
             self.window_scores = self.dropout(self.bilinear(mentions))
 
             bilinear_scores = self.window_scores.mm(mentions.T)
             self.bilinear_scores = bilinear_scores
 
-            rough_scores = self.pair_mask + bilinear_scores
+            rough_scores = curr_pair_mask + bilinear_scores
 
             return self._prune(rough_scores)
         else:
