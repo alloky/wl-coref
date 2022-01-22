@@ -103,7 +103,7 @@ class IncrementalRoughScorer(torch.nn.Module):
             pair_mask = pair_mask.to(mentions.device)
 
             new_mention_scores = self.dropout(self.bilinear(mentions[-1, :]))
-            self.window_scores = torch.vstack((self.window_scores, new_mention_scores))
+            self.window_scores = torch.vstack((self.window_scores[1:, :], new_mention_scores))
 
             bilinear_scores = self.window_scores.mm(mentions.T)
 
