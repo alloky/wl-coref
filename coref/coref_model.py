@@ -222,7 +222,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
         top_rough_scores = torch.zeros((len(words), self.config.rough_k)).to(self.config.device) - 1000000
         top_indices = torch.zeros((len(words), self.config.rough_k)).to(self.config.device).to(torch.long)
         if windows_size == 0 or len(words) < windows_size:
-            top_rough_scores, top_indices = self.rough_scorer(words)
+            top_rough_scores, top_indices = self.rough_scorer(words, first=True)
         else:
             for idx in range(len(words) - windows_size):
                 window_start = idx
