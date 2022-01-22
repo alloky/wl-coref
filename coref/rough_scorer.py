@@ -92,6 +92,7 @@ class IncrementalRoughScorer(torch.nn.Module):
             self.window_scores = self.dropout(self.bilinear(mentions))
 
             bilinear_scores = self.window_scores.mm(mentions.T)
+            self.bilinear_scores = bilinear_scores
 
             rough_scores = pair_mask + bilinear_scores
 
@@ -105,9 +106,10 @@ class IncrementalRoughScorer(torch.nn.Module):
             new_mention_scores = self.dropout(self.bilinear(mentions[-1, :]))
             self.window_scores = torch.vstack((self.window_scores[1:, :], new_mention_scores))
 
-            bilinear_scores = self.window_scores.mm(mentions.T)
+            new_bilinear_scores = self.window_scores.mm(new_mention_scores.T)
+            self.bilinear_scores = torch.vstack((self.bilinear_scores[1:, :], new_bilinear_scores))
 
-            rough_scores = pair_mask + bilinear_scores
+            rough_scores = pair_mask + self.bilinear_scores
 
             return self._prune(rough_scores)
 
