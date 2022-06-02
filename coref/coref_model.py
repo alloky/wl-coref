@@ -21,7 +21,7 @@ from coref.config import Config
 from coref.const import CorefResult, Doc
 from coref.loss import CorefLoss
 from coref.pairwise_encoder import PairwiseEncoder
-from coref.rough_scorer import IncrementalRoughScorer
+from coref.rough_scorer import IncrementalRoughScorer, RoughScorer
 from coref.span_predictor import SpanPredictor
 from coref.tokenizer_customization import TOKENIZER_FILTERS, TOKENIZER_MAPS
 from coref.utils import GraphNode
@@ -199,9 +199,44 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                     self.trainable[key].load_state_dict(state_dict)
                 print(f"Loaded {key}")
 
+    def calculate_anaporicity_score(
+            self,
+            a_start,
+            a_end,
+            top_indices,
+            doc,
+            words,
+            top_rough_scores
+    ):
+        # print("$$$$$$$$$$$")
+        # print("a_borders", a_start, a_end)
+
+        pw_batch = self.pw(
+            top_indices,
+            doc,
+            a_start,
+            a_end
+        )
+
+        # pw_batch = pw[i:i + batch_size]
+        words_batch = words[a_start:a_end]
+        top_indices_batch = top_indices  # [i:i + batch_size]
+        top_rough_scores_batch = top_rough_scores  # [i:i + batch_size]
+
+        # a_scores_batch    [batch_size, n_ants]
+        a_scores_batch = self.a_scorer(
+            all_mentions=words, mentions_batch=words_batch,
+            pw_batch=pw_batch, top_indices_batch=top_indices_batch,
+            top_rough_scores_batch=top_rough_scores_batch,
+            window_start=a_start,
+            window_end=a_end
+        )
+
+        return a_scores_batch
+
     def run(self,  # pylint: disable=too-many-locals
             doc: Doc,
-            windows_size: int = 400
+            window_size: int = 512
             ) -> CorefResult:
         """
         This is a massive method, but it made sense to me to not split it into
@@ -209,7 +244,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
 
         Args:
             doc (Doc): a dictionary with the document data.
-            windows_size: if > 0 then windowed scoring is used
+            window_size: if > 0 then windowed scoring is used
 
         Returns:
             CorefResult (see const.py)
@@ -219,50 +254,149 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
         # cluster_ids     [n_words]
         words, cluster_ids = self.we(doc, self._bertify(doc))
 
-        top_rough_scores = torch.ones((len(words), self.config.rough_k)).to(self.config.device) * torch.Tensor([-torch.inf]).to(self.config.device)
+        top_rough_scores = torch.ones((len(words), self.config.rough_k)).to(self.config.device) * \
+            torch.Tensor([-torch.as_tensor(float('inf'))]).to(self.config.device)
         top_indices = torch.zeros((len(words), self.config.rough_k)).to(self.config.device).to(torch.long)
-        if windows_size == 0 or len(words) < windows_size:
-            top_rough_scores, top_indices = self.rough_scorer(words, first=True, window_size=windows_size)
-        else:
-            for idx in range(len(words) - windows_size):
-                window_start = idx
-                window_end = idx + windows_size
-
-                # Obtain bilinear scores and leave only top-k antecedents for each word
-                # top_rough_scores  [windows_size, n_ants]
-                # top_indices       [windows_size, n_ants]
-                window_top_rough_scores, window_top_indices = self.rough_scorer(
-                    words[window_start:window_end],
-                    first=(idx == 0),
-                    window_size=windows_size
-                )
-
-                concated = torch.hstack((window_top_rough_scores, top_rough_scores[window_start:window_end]))
-                concated_indices = torch.hstack((window_top_indices + idx, top_indices[window_start:window_end]))
-
-                topk = torch.topk(concated, window_top_rough_scores.shape[1], dim=1)
-
-                top_rough_scores[window_start:window_end] = topk.values
-                top_indices[window_start:window_end] = torch.gather(concated_indices, 1, topk.indices)
-
-        # Get pairwise features [n_words, n_ants, n_pw_features]
-        pw = self.pw(top_indices, doc)
+        # if window_size == 0 or len(words) < window_size:
+        #     top_rough_scores, top_indices = self.rough_scorer(words, first=True, window_size=window_size)
+        # else:
+        #     for idx in range(0, len(words), window_size):
+        #         window_start = idx
+        #         window_end = idx + window_size
+        #
+        #         # Obtain bilinear scores and leave only top-k antecedents for each word
+        #         # top_rough_scores  [windows_size, n_ants]
+        #         # top_indices       [windows_size, n_ants]
+        #         window_top_rough_scores, window_top_indices = self.rough_scorer(
+        #             words[window_start:window_end],
+        #             first=(idx == 0),
+        #             window_size=window_size
+        #         )
+        #
+        #         concated = torch.hstack((window_top_rough_scores, top_rough_scores[window_start:window_end]))
+        #         concated_indices = torch.hstack((window_top_indices + idx, top_indices[window_start:window_end]))
+        #
+        #         topk = torch.topk(concated, window_top_rough_scores.shape[1], dim=1)
+        #
+        #         top_rough_scores[window_start:window_end] = topk.values
+        #         top_indices[window_start:window_end] = torch.gather(concated_indices, 1, topk.indices)
+        #
+        # # Get pairwise features [n_words, n_ants, n_pw_features]
+        # pw = self.pw(top_indices, doc)
 
         batch_size = self.config.a_scoring_batch_size
         a_scores_lst: List[torch.Tensor] = []
 
-        for i in range(0, len(words), batch_size):
-            pw_batch = pw[i:i + batch_size]
-            words_batch = words[i:i + batch_size]
-            top_indices_batch = top_indices[i:i + batch_size]
-            top_rough_scores_batch = top_rough_scores[i:i + batch_size]
+        prev_top_scores = None
+        prev_top_indices = None
 
-            # a_scores_batch    [batch_size, n_ants]
-            a_scores_batch = self.a_scorer(
-                all_mentions=words, mentions_batch=words_batch,
-                pw_batch=pw_batch, top_indices_batch=top_indices_batch,
-                top_rough_scores_batch=top_rough_scores_batch
+        half_batch_size = batch_size // 2
+        for i in range(0, len(words), half_batch_size):
+            window_start = i
+            window_end = i + window_size
+
+            if i == (len(words) - len(words) % half_batch_size):
+                a_start = window_start
+                a_end = len(words)
+
+                a_scores_batch = self.calculate_anaporicity_score(
+                    a_start,
+                    a_end,
+                    top_indices,
+                    doc,
+                    words,
+                    top_rough_scores
+                )
+
+                a_scores_lst.append(a_scores_batch)
+
+                break
+
+            # Obtain bilinear scores and leave only top-k antecedents for each word
+            # top_rough_scores  [windows_size, n_ants]
+            # top_indices       [windows_size, n_ants]
+            window_top_rough_scores, window_top_indices = self.rough_scorer(
+                words[window_start:window_end],
             )
+
+            window_top_indices = window_top_indices + i
+
+            if i == 0:
+                # base case
+                prev_top_scores = window_top_rough_scores
+                prev_top_indices = window_top_indices
+                # TODO: recalculate indices idx ?
+
+                top_indices[i: i + half_batch_size] = prev_top_indices[:half_batch_size]
+                top_rough_scores[i:i + half_batch_size] = prev_top_scores[:half_batch_size]
+
+                a_start = window_start
+                a_end = window_start + half_batch_size
+                a_scores_batch = self.calculate_anaporicity_score(
+                    a_start,
+                    a_end,
+                    top_indices,
+                    doc,
+                    words,
+                    top_rough_scores
+                )
+
+                a_scores_lst.append(a_scores_batch)
+
+                continue
+
+            # top_rough_scores, top_indices = self.rough_scorer(words, first=True, window_size=window_size)
+            #
+            # print("*******")
+            # print(window_top_rough_scores.shape)
+            # print(prev_top_scores.shape)
+            # print("borders", window_start, window_end)
+
+            r_start = i + half_batch_size
+            r_end = i + batch_size
+
+            united_rough_scores = torch.stack(
+                [window_top_rough_scores[:half_batch_size, ], prev_top_scores[half_batch_size:, ]]
+            )
+            max_rough_scores = torch.max(united_rough_scores, dim=0)
+
+            selected_indices = torch.gather(
+                torch.stack(
+                    [
+                        window_top_indices[:half_batch_size, ],
+                        prev_top_indices[half_batch_size:, ],
+                    ]
+                ),
+                0,
+                max_rough_scores.indices.reshape(1, half_batch_size, self.config.rough_k)
+            )
+
+            window_top_indices[:half_batch_size, ] = selected_indices
+            window_top_rough_scores[:half_batch_size, ] = max_rough_scores.values
+
+            top_indices[i:i + half_batch_size] = selected_indices
+            top_rough_scores[i:i + half_batch_size] = max_rough_scores.values
+
+            prev_top_indices[half_batch_size:, ] = window_top_indices[:half_batch_size]
+            prev_top_scores[half_batch_size:, ] = window_top_rough_scores[:half_batch_size]
+
+            if i == (half_batch_size * (len(words) // half_batch_size)):
+                top_indices[i + half_batch_size:] = window_top_indices[half_batch_size:]
+                top_rough_scores[i + half_batch_size:] = window_top_rough_scores[half_batch_size:]
+
+            # Extract anaphoricity score from half-batch
+
+            a_start = window_start
+            a_end = window_start + half_batch_size
+            a_scores_batch = self.calculate_anaporicity_score(
+                a_start,
+                a_end,
+                top_indices,
+                doc,
+                words,
+                top_rough_scores
+            )
+
             a_scores_lst.append(a_scores_batch)
 
         res = CorefResult()
@@ -388,7 +522,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
         # pylint: disable=line-too-long
         self.a_scorer = AnaphoricityScorer(pair_emb, self.config).to(self.config.device)
         self.we = WordEncoder(bert_emb, self.config).to(self.config.device)
-        self.rough_scorer = IncrementalRoughScorer(bert_emb, self.config).to(self.config.device)
+        self.rough_scorer = RoughScorer(bert_emb, self.config).to(self.config.device)
         self.sp = SpanPredictor(bert_emb, self.config.sp_embedding_size).to(self.config.device)
 
         self.trainable: Dict[str, torch.nn.Module] = {

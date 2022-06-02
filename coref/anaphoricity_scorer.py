@@ -31,6 +31,8 @@ class AnaphoricityScorer(torch.nn.Module):
                 pw_batch: torch.Tensor,
                 top_indices_batch: torch.Tensor,
                 top_rough_scores_batch: torch.Tensor,
+                window_start: int,
+                window_end: int
                 ) -> torch.Tensor:
         """ Builds a pairwise matrix, scores the pairs and returns the scores.
 
@@ -47,10 +49,16 @@ class AnaphoricityScorer(torch.nn.Module):
         """
         # [batch_size, n_ants, pair_emb]
         pair_matrix = self._get_pair_matrix(
-            all_mentions, mentions_batch, pw_batch, top_indices_batch)
+            all_mentions,
+            mentions_batch,
+            pw_batch,
+            top_indices_batch,
+            window_start,
+            window_end
+        )
 
         # [batch_size, n_ants]
-        scores = top_rough_scores_batch + self._ffnn(pair_matrix)
+        scores = top_rough_scores_batch[window_start:window_end] + self._ffnn(pair_matrix)
         scores = utils.add_dummy(scores, eps=True)
 
         return scores
@@ -73,6 +81,8 @@ class AnaphoricityScorer(torch.nn.Module):
                          mentions_batch: torch.Tensor,
                          pw_batch: torch.Tensor,
                          top_indices_batch: torch.Tensor,
+                         windows_start: int,
+                         window_end: int
                          ) -> torch.Tensor:
         """
         Builds the matrix used as input for AnaphoricityScorer.
@@ -97,7 +107,16 @@ class AnaphoricityScorer(torch.nn.Module):
         n_ants = pw_batch.shape[1]
 
         a_mentions = mentions_batch.unsqueeze(1).expand(-1, n_ants, emb_size)
-        b_mentions = all_mentions[top_indices_batch]
+        b_mentions = all_mentions[top_indices_batch[windows_start:window_end]]
+
+        # print("==================")
+        # print("mention", mentions_batch.shape)
+        # print("a", a_mentions.shape)
+        # print("b", b_mentions.shape)
+        # print("top", top_indices_batch.shape)
+        # print("all", all_mentions.shape)
+        # print(windows_start, window_end)
+
         similarity = a_mentions * b_mentions
 
         out = torch.cat((a_mentions, b_mentions, similarity, pw_batch), dim=2)
