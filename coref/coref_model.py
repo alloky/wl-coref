@@ -209,8 +209,8 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
             words,
             top_rough_scores
     ):
-        # print("$$$$$$$$$$$")
-        # print("a_borders", a_start, a_end)
+        print("$$$$$$$$$$$")
+        print("a_borders", a_start, a_end)
 
         pw_batch = self.pw(
             top_indices,
@@ -383,7 +383,6 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
             # prev_top_indices[half_batch_size:, ] = window_top_indices[:half_batch_size]
             # prev_top_scores[half_batch_size:, ] = window_top_rough_scores[:half_batch_size]
 
-
             a_start = window_start
             a_end = window_start + half_batch_size
 
@@ -392,6 +391,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 top_rough_scores[i + half_batch_size:] = window_top_rough_scores[half_batch_size:]
 
                 a_end = window_end
+
             # Extract anaphoricity score from half-batch
 
             a_scores_batch = self.calculate_anaporicity_score(
