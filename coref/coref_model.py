@@ -27,6 +27,7 @@ from coref.tokenizer_customization import TOKENIZER_FILTERS, TOKENIZER_MAPS
 from coref.utils import GraphNode
 from coref.word_encoder import WordEncoder
 
+torch.autograd.set_detect_anomaly(True)
 
 class CorefModel:  # pylint: disable=too-many-instance-attributes
     """Combines all coref modules together to find coreferent spans.
