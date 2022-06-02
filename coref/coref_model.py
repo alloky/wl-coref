@@ -371,14 +371,14 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 max_rough_scores.indices.reshape(1, half_batch_size, self.config.rough_k)
             )
 
-            window_top_indices[:half_batch_size, ] = selected_indices
-            window_top_rough_scores[:half_batch_size, ] = max_rough_scores.values
+            # window_top_indices[:half_batch_size, ] = selected_indices
+            # window_top_rough_scores[:half_batch_size, ] = max_rough_scores.values
 
             top_indices[i:i + half_batch_size] = selected_indices
             top_rough_scores[i:i + half_batch_size] = max_rough_scores.values
 
-            prev_top_indices[half_batch_size:, ] = window_top_indices[:half_batch_size]
-            prev_top_scores[half_batch_size:, ] = window_top_rough_scores[:half_batch_size]
+            # prev_top_indices[half_batch_size:, ] = window_top_indices[:half_batch_size]
+            # prev_top_scores[half_batch_size:, ] = window_top_rough_scores[:half_batch_size]
 
             if i == (half_batch_size * (len(words) // half_batch_size)):
                 top_indices[i + half_batch_size:] = window_top_indices[half_batch_size:]
@@ -396,6 +396,9 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 words,
                 top_rough_scores
             )
+
+            prev_top_scores = window_top_rough_scores
+            prev_top_indices = window_top_indices
 
             a_scores_lst.append(a_scores_batch)
 
