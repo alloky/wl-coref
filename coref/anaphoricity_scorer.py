@@ -107,7 +107,8 @@ class AnaphoricityScorer(torch.nn.Module):
         n_ants = pw_batch.shape[1]
 
         a_mentions = mentions_batch.unsqueeze(1).expand(-1, n_ants, emb_size)
-        b_mentions = all_mentions[top_indices_batch[windows_start:window_end]]
+        window_indices = top_indices_batch[windows_start:window_end]
+        b_mentions = all_mentions[window_indices]
 
         # print("==================")
         # print("mention", mentions_batch.shape)
