@@ -322,6 +322,12 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
 
             window_top_indices = window_top_indices + i
 
+            #
+            print("*******")
+            # print(window_top_rough_scores.shape)
+            # print(prev_top_scores.shape)
+            print("borders", window_start, window_end)
+
             if i == 0:
                 # base case
                 prev_top_scores = window_top_rough_scores
@@ -347,11 +353,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 continue
 
             # top_rough_scores, top_indices = self.rough_scorer(words, first=True, window_size=window_size)
-            #
-            # print("*******")
-            # print(window_top_rough_scores.shape)
-            # print(prev_top_scores.shape)
-            # print("borders", window_start, window_end)
+
 
             r_start = i + half_batch_size
             r_end = i + batch_size
