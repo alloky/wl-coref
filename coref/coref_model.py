@@ -397,8 +397,8 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
             if i == (half_batch_size * (len(words) // half_batch_size - 1)):
                 print("here")
                 print(">>>>", i + half_batch_size, len(top_indices))
-                top_indices[i + half_batch_size:] = window_top_indices[half_batch_size:]
-                top_rough_scores[i + half_batch_size:] = window_top_rough_scores[half_batch_size:]
+                top_indices[i + half_batch_size:] = window_top_indices[half_batch_size:].clone()
+                top_rough_scores[i + half_batch_size:] = window_top_rough_scores[half_batch_size:].clone()
 
                 a_end = window_end
 
