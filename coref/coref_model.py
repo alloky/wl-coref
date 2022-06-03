@@ -209,8 +209,8 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
             words,
             top_rough_scores
     ):
-        # print("$$$$$$$$$$$")
-        # print("a_borders", a_start, a_end)
+        print("$$$$$$$$$$$")
+        print("a_borders", a_start, a_end)
 
         pw_batch = self.pw(
             top_indices,
@@ -323,10 +323,10 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
             window_top_indices = window_top_indices + i
 
             #
-            # print("*******")
+            print("*******")
             # print(window_top_rough_scores.shape)
             # print(prev_top_scores.shape)
-            # print("borders", window_start, window_end)
+            print("borders", window_start, window_end)
 
             if i == 0:
                 # base case
@@ -334,7 +334,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 prev_top_indices = window_top_indices
                 # TODO: recalculate indices idx ?
 
-                # print(">>>>", i, i + half_batch_size)
+                print(">>>>", i, i + half_batch_size)
                 top_indices[i: i + half_batch_size] = prev_top_indices[:half_batch_size]
                 top_rough_scores[i:i + half_batch_size] = prev_top_scores[:half_batch_size]
 
@@ -394,7 +394,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
             # window_top_indices[:half_batch_size, ] = selected_indices
             # window_top_rough_scores[:half_batch_size, ] = max_rough_scores.values
 
-            # print(">>>>", i, i + half_batch_size)
+            print(">>>>", i, i + half_batch_size)
             top_indices[i:i + half_batch_size] = selected_indices
             top_rough_scores[i:i + half_batch_size] = max_rough_scores.values
 
@@ -404,10 +404,10 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
             a_start = window_start
             a_end = window_start + half_batch_size
 
-            # print("hello", i, (half_batch_size * (len(words) // half_batch_size - 1)), len(words))
+            print("hello", i, (half_batch_size * (len(words) // half_batch_size - 1)), len(words))
             if i == (half_batch_size * (len(words) // half_batch_size - 1)):
-                # print("here")
-                # print(">>>>", i + half_batch_size, len(top_indices))
+                print("here")
+                print(">>>>", i + half_batch_size, len(top_indices))
                 top_indices[i + half_batch_size:] = window_top_indices[half_batch_size:]
                 top_rough_scores[i + half_batch_size:] = window_top_rough_scores[half_batch_size:]
 
