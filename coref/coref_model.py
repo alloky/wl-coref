@@ -297,19 +297,29 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
             window_end = i + window_size
 
             if i == (len(words) - len(words) % half_batch_size):
-                # a_start = window_start
-                # a_end = len(words)
-                #
-                # a_scores_batch = self.calculate_anaporicity_score(
-                #     a_start,
-                #     a_end,
-                #     top_indices,
-                #     doc,
-                #     words,
-                #     top_rough_scores
-                # )
-                #
-                # a_scores_lst.append(a_scores_batch)
+                if i == 0:
+                    window_top_rough_scores, window_top_indices = self.rough_scorer(
+                        words[window_start:window_end],
+                    )
+
+                    window_top_indices = window_top_indices + i
+
+                    top_indices[i: i + window_size] = window_top_indices.clone()
+                    top_rough_scores[i:i + window_size] = window_top_rough_scores.clone()
+
+                    a_start = 0
+                    a_end = len(words)
+
+                    a_scores_batch = self.calculate_anaporicity_score(
+                        a_start,
+                        a_end,
+                        top_indices,
+                        doc,
+                        words,
+                        top_rough_scores
+                    )
+
+                    a_scores_lst.append(a_scores_batch)
 
                 break
 
