@@ -335,8 +335,8 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 # TODO: recalculate indices idx ?
 
                 print(">>>>", i, i + half_batch_size)
-                top_indices[i: i + half_batch_size] = prev_top_indices[:half_batch_size]
-                top_rough_scores[i:i + half_batch_size] = prev_top_scores[:half_batch_size]
+                top_indices[i: i + half_batch_size] = prev_top_indices[:half_batch_size].clone()
+                top_rough_scores[i:i + half_batch_size] = prev_top_scores[:half_batch_size].clone()
 
             else:
                 # top_rough_scores, top_indices = self.rough_scorer(words, first=True, window_size=window_size)
@@ -358,7 +358,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 # )
 
                 united_rough_scores = torch.cat(
-                    (window_top_rough_scores[:half_batch_size, ], prev_top_scores[half_batch_size:, ]), 1
+                    (window_top_rough_scores[:half_batch_size, ].clone(), prev_top_scores[half_batch_size:, ].clone()), 1
                 )
 
                 # print(united_rough_scores)
@@ -368,8 +368,8 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 selected_indices = torch.gather(
                     torch.cat(
                         (
-                            window_top_indices[:half_batch_size, ],
-                            prev_top_indices[half_batch_size:, ],
+                            window_top_indices[:half_batch_size, ].clone(),
+                            prev_top_indices[half_batch_size:, ].clone(),
                         ),
                         1
                     ),
