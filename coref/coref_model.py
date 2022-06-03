@@ -338,68 +338,54 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 top_indices[i: i + half_batch_size] = prev_top_indices[:half_batch_size]
                 top_rough_scores[i:i + half_batch_size] = prev_top_scores[:half_batch_size]
 
-                a_start = window_start
-                a_end = window_start + half_batch_size
-                a_scores_batch = self.calculate_anaporicity_score(
-                    a_start,
-                    a_end,
-                    top_indices,
-                    doc,
-                    words,
-                    top_rough_scores
+            else:
+                # top_rough_scores, top_indices = self.rough_scorer(words, first=True, window_size=window_size)
+
+                # united_rough_scores = torch.stack(
+                #     [window_top_rough_scores[:half_batch_size, ], prev_top_scores[half_batch_size:, ]]
+                # )
+                # max_rough_scores = torch.max(united_rough_scores, dim=0)
+                #
+                # selected_indices = torch.gather(
+                #     torch.stack(
+                #         [
+                #             window_top_indices[:half_batch_size, ],
+                #             prev_top_indices[half_batch_size:, ],
+                #         ]
+                #     ),
+                #     0,
+                #     max_rough_scores.indices.reshape(1, half_batch_size, self.config.rough_k)
+                # )
+
+                united_rough_scores = torch.cat(
+                    (window_top_rough_scores[:half_batch_size, ], prev_top_scores[half_batch_size:, ]), 1
                 )
 
-                a_scores_lst.append(a_scores_batch)
+                # print(united_rough_scores)
 
-                continue
+                max_rough_scores = torch.topk(united_rough_scores, self.config.rough_k, dim=1)
 
-            # top_rough_scores, top_indices = self.rough_scorer(words, first=True, window_size=window_size)
-
-            # united_rough_scores = torch.stack(
-            #     [window_top_rough_scores[:half_batch_size, ], prev_top_scores[half_batch_size:, ]]
-            # )
-            # max_rough_scores = torch.max(united_rough_scores, dim=0)
-            #
-            # selected_indices = torch.gather(
-            #     torch.stack(
-            #         [
-            #             window_top_indices[:half_batch_size, ],
-            #             prev_top_indices[half_batch_size:, ],
-            #         ]
-            #     ),
-            #     0,
-            #     max_rough_scores.indices.reshape(1, half_batch_size, self.config.rough_k)
-            # )
-
-            united_rough_scores = torch.cat(
-                (window_top_rough_scores[:half_batch_size, ], prev_top_scores[half_batch_size:, ]), 1
-            )
-
-            # print(united_rough_scores)
-
-            max_rough_scores = torch.topk(united_rough_scores, self.config.rough_k, dim=1)
-
-            selected_indices = torch.gather(
-                torch.cat(
-                    (
-                        window_top_indices[:half_batch_size, ],
-                        prev_top_indices[half_batch_size:, ],
+                selected_indices = torch.gather(
+                    torch.cat(
+                        (
+                            window_top_indices[:half_batch_size, ],
+                            prev_top_indices[half_batch_size:, ],
+                        ),
+                        1
                     ),
-                    1
-                ),
-                1,
-                max_rough_scores.indices
-            )
+                    1,
+                    max_rough_scores.indices
+                )
 
-            # window_top_indices[:half_batch_size, ] = selected_indices
-            # window_top_rough_scores[:half_batch_size, ] = max_rough_scores.values
+                # window_top_indices[:half_batch_size, ] = selected_indices
+                # window_top_rough_scores[:half_batch_size, ] = max_rough_scores.values
 
-            print(">>>>", i, i + half_batch_size)
-            top_indices[i:i + half_batch_size] = selected_indices
-            top_rough_scores[i:i + half_batch_size] = max_rough_scores.values
+                print(">>>>", i, i + half_batch_size)
+                top_indices[i:i + half_batch_size] = selected_indices
+                top_rough_scores[i:i + half_batch_size] = max_rough_scores.values
 
-            # prev_top_indices[half_batch_size:, ] = window_top_indices[:half_batch_size]
-            # prev_top_scores[half_batch_size:, ] = window_top_rough_scores[:half_batch_size]
+                # prev_top_indices[half_batch_size:, ] = window_top_indices[:half_batch_size]
+                # prev_top_scores[half_batch_size:, ] = window_top_rough_scores[:half_batch_size]
 
             a_start = window_start
             a_end = window_start + half_batch_size
