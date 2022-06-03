@@ -209,8 +209,8 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
             words,
             top_rough_scores
     ):
-        print("$$$$$$$$$$$")
-        print("a_borders", a_start, a_end)
+        # print("$$$$$$$$$$$")
+        # print("a_borders", a_start, a_end)
 
         pw_batch = self.pw(
             top_indices,
@@ -297,19 +297,19 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
             window_end = i + window_size
 
             if i == (len(words) - len(words) % half_batch_size):
-                a_start = window_start
-                a_end = len(words)
-
-                a_scores_batch = self.calculate_anaporicity_score(
-                    a_start,
-                    a_end,
-                    top_indices,
-                    doc,
-                    words,
-                    top_rough_scores
-                )
-
-                a_scores_lst.append(a_scores_batch)
+                # a_start = window_start
+                # a_end = len(words)
+                #
+                # a_scores_batch = self.calculate_anaporicity_score(
+                #     a_start,
+                #     a_end,
+                #     top_indices,
+                #     doc,
+                #     words,
+                #     top_rough_scores
+                # )
+                #
+                # a_scores_lst.append(a_scores_batch)
 
                 break
 
@@ -323,10 +323,10 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
             window_top_indices = window_top_indices + i
 
             #
-            print("*******")
+            # print("*******")
             # print(window_top_rough_scores.shape)
             # print(prev_top_scores.shape)
-            print("borders", window_start, window_end)
+            # print("borders", window_start, window_end)
 
             if i == 0:
                 # base case
@@ -334,6 +334,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 prev_top_indices = window_top_indices
                 # TODO: recalculate indices idx ?
 
+                # print(">>>>", i, i + half_batch_size)
                 top_indices[i: i + half_batch_size] = prev_top_indices[:half_batch_size]
                 top_rough_scores[i:i + half_batch_size] = prev_top_scores[:half_batch_size]
 
@@ -354,29 +355,46 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
 
             # top_rough_scores, top_indices = self.rough_scorer(words, first=True, window_size=window_size)
 
+            # united_rough_scores = torch.stack(
+            #     [window_top_rough_scores[:half_batch_size, ], prev_top_scores[half_batch_size:, ]]
+            # )
+            # max_rough_scores = torch.max(united_rough_scores, dim=0)
+            #
+            # selected_indices = torch.gather(
+            #     torch.stack(
+            #         [
+            #             window_top_indices[:half_batch_size, ],
+            #             prev_top_indices[half_batch_size:, ],
+            #         ]
+            #     ),
+            #     0,
+            #     max_rough_scores.indices.reshape(1, half_batch_size, self.config.rough_k)
+            # )
 
-            r_start = i + half_batch_size
-            r_end = i + batch_size
-
-            united_rough_scores = torch.stack(
-                [window_top_rough_scores[:half_batch_size, ], prev_top_scores[half_batch_size:, ]]
+            united_rough_scores = torch.cat(
+                (window_top_rough_scores[:half_batch_size, ], prev_top_scores[half_batch_size:, ]), 1
             )
-            max_rough_scores = torch.max(united_rough_scores, dim=0)
+
+            # print(united_rough_scores)
+
+            max_rough_scores = torch.topk(united_rough_scores, self.config.rough_k, dim=1)
 
             selected_indices = torch.gather(
-                torch.stack(
-                    [
+                torch.cat(
+                    (
                         window_top_indices[:half_batch_size, ],
                         prev_top_indices[half_batch_size:, ],
-                    ]
+                    ),
+                    1
                 ),
-                0,
-                max_rough_scores.indices.reshape(1, half_batch_size, self.config.rough_k)
+                1,
+                max_rough_scores.indices
             )
 
             # window_top_indices[:half_batch_size, ] = selected_indices
             # window_top_rough_scores[:half_batch_size, ] = max_rough_scores.values
 
+            # print(">>>>", i, i + half_batch_size)
             top_indices[i:i + half_batch_size] = selected_indices
             top_rough_scores[i:i + half_batch_size] = max_rough_scores.values
 
@@ -386,7 +404,10 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
             a_start = window_start
             a_end = window_start + half_batch_size
 
-            if i == (half_batch_size * (len(words) // half_batch_size)):
+            # print("hello", i, (half_batch_size * (len(words) // half_batch_size - 1)), len(words))
+            if i == (half_batch_size * (len(words) // half_batch_size - 1)):
+                # print("here")
+                # print(">>>>", i + half_batch_size, len(top_indices))
                 top_indices[i + half_batch_size:] = window_top_indices[half_batch_size:]
                 top_rough_scores[i + half_batch_size:] = window_top_rough_scores[half_batch_size:]
 
@@ -412,6 +433,8 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
 
         # coref_scores  [n_spans, n_ants]
         res.coref_scores = torch.cat(a_scores_lst, dim=0)
+
+        # print("Result:", res.coref_scores.shape)
 
         res.coref_y = self._get_ground_truth(
             cluster_ids, top_indices, (top_rough_scores > float("-inf")))
