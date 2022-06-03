@@ -304,8 +304,8 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
 
                     window_top_indices = window_top_indices + i
 
-                    top_indices[i: i + window_size] = window_top_indices.clone()
-                    top_rough_scores[i:i + window_size] = window_top_rough_scores.clone()
+                    top_indices[i: i + window_size, :window_top_indices.shape[1]] = window_top_indices.clone()
+                    top_rough_scores[i:i + window_size, :window_top_rough_scores.shape[1]] = window_top_rough_scores.clone()
 
                     a_start = 0
                     a_end = len(words)
