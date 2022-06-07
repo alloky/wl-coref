@@ -207,7 +207,8 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
             top_indices,
             doc,
             words,
-            top_rough_scores
+            top_rough_scores,
+            eval_only
     ):
         # print("$$$$$$$$$$$")
         # print("a_borders", a_start, a_end)
@@ -230,14 +231,16 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
             pw_batch=pw_batch, top_indices_batch=top_indices_batch,
             top_rough_scores_batch=top_rough_scores_batch,
             window_start=a_start,
-            window_end=a_end
+            window_end=a_end,
+            eval_only=eval_only
         )
 
         return a_scores_batch
 
     def run(self,  # pylint: disable=too-many-locals
             doc: Doc,
-            window_size: int = 512
+            window_size: int = 512,
+            eval_only=False,
             ) -> CorefResult:
         """
         This is a massive method, but it made sense to me to not split it into
@@ -304,8 +307,12 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
 
                     window_top_indices = window_top_indices + i
 
-                    top_indices[i: i + window_size, :window_top_indices.shape[1]] = window_top_indices.clone()
-                    top_rough_scores[i:i + window_size, :window_top_rough_scores.shape[1]] = window_top_rough_scores.clone()
+                    if not eval_only:
+                        top_indices[i: i + window_size, :window_top_indices.shape[1]] = window_top_indices.clone()
+                        top_rough_scores[i:i + window_size, :window_top_rough_scores.shape[1]] = window_top_rough_scores.clone()
+                    else:
+                        top_indices[i: i + window_size, :window_top_indices.shape[1]] = window_top_indices
+                        top_rough_scores[i:i + window_size,:window_top_rough_scores.shape[1]] = window_top_rough_scores
 
                     a_start = 0
                     a_end = len(words)
@@ -316,7 +323,8 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                         top_indices,
                         doc,
                         words,
-                        top_rough_scores
+                        top_rough_scores,
+                        eval_only
                     )
 
                     a_scores_lst.append(a_scores_batch)
@@ -345,9 +353,12 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 # TODO: recalculate indices idx ?
 
                 # print(">>>>", i, i + half_batch_size)
-                top_indices[i: i + half_batch_size] = prev_top_indices[:half_batch_size].clone()
-                top_rough_scores[i:i + half_batch_size] = prev_top_scores[:half_batch_size].clone()
-
+                if not eval_only:
+                    top_indices[i: i + half_batch_size] = prev_top_indices[:half_batch_size].clone()
+                    top_rough_scores[i:i + half_batch_size] = prev_top_scores[:half_batch_size].clone()
+                else:
+                    top_indices[i: i + half_batch_size] = prev_top_indices[:half_batch_size]
+                    top_rough_scores[i:i + half_batch_size] = prev_top_scores[:half_batch_size]
             else:
                 # top_rough_scores, top_indices = self.rough_scorer(words, first=True, window_size=window_size)
 
@@ -367,25 +378,43 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 #     max_rough_scores.indices.reshape(1, half_batch_size, self.config.rough_k)
                 # )
 
-                united_rough_scores = torch.cat(
-                    (window_top_rough_scores[:half_batch_size, ].clone(), prev_top_scores[half_batch_size:, ].clone()), 1
-                )
+                if not eval_only:
+                    united_rough_scores = torch.cat(
+                        (window_top_rough_scores[:half_batch_size, ].clone(), prev_top_scores[half_batch_size:, ].clone()), 1
+                    )
+                else:
+                    united_rough_scores = torch.cat(
+                        (window_top_rough_scores[:half_batch_size, ], prev_top_scores[half_batch_size:, ]), 1
+                    )
 
                 # print(united_rough_scores)
 
                 max_rough_scores = torch.topk(united_rough_scores, self.config.rough_k, dim=1)
 
-                selected_indices = torch.gather(
-                    torch.cat(
-                        (
-                            window_top_indices[:half_batch_size, ].clone(),
-                            prev_top_indices[half_batch_size:, ].clone(),
+                if not eval_only:
+                    selected_indices = torch.gather(
+                        torch.cat(
+                            (
+                                window_top_indices[:half_batch_size, ].clone(),
+                                prev_top_indices[half_batch_size:, ].clone(),
+                            ),
+                            1
                         ),
-                        1
-                    ),
-                    1,
-                    max_rough_scores.indices
-                )
+                        1,
+                        max_rough_scores.indices
+                    )
+                else:
+                    selected_indices = torch.gather(
+                        torch.cat(
+                            (
+                                window_top_indices[:half_batch_size, ],
+                                prev_top_indices[half_batch_size:, ],
+                            ),
+                            1
+                        ),
+                        1,
+                        max_rough_scores.indices
+                    )
 
                 # window_top_indices[:half_batch_size, ] = selected_indices
                 # window_top_rough_scores[:half_batch_size, ] = max_rough_scores.values
@@ -407,8 +436,13 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
             if i == (half_batch_size * (len(words) // half_batch_size - 1)):
                 # print("here")
                 # print(">>>>", i + half_batch_size, len(top_indices))
-                top_indices[i + half_batch_size:] = window_top_indices[half_batch_size:].clone()
-                top_rough_scores[i + half_batch_size:] = window_top_rough_scores[half_batch_size:].clone()
+
+                if not eval_only:
+                    top_indices[i + half_batch_size:] = window_top_indices[half_batch_size:].clone()
+                    top_rough_scores[i + half_batch_size:] = window_top_rough_scores[half_batch_size:].clone()
+                else:
+                    top_indices[i + half_batch_size:] = window_top_indices[half_batch_size:]
+                    top_rough_scores[i + half_batch_size:] = window_top_rough_scores[half_batch_size:]
 
                 a_end = window_end
 
@@ -420,7 +454,8 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                 top_indices,
                 doc,
                 words,
-                top_rough_scores
+                top_rough_scores,
+                eval_only
             )
 
             a_scores_lst.append(a_scores_batch)
@@ -437,6 +472,16 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
         res.word_clusters = self._clusterize(doc, res.coref_scores,
                                              top_indices)
         res.span_scores, res.span_y = self.sp.get_training_data(doc, words)
+
+        top_rough_scores = None
+        top_indices = None
+        a_scores_lst = None
+        res.span_scores = None
+        res.span_y = None
+
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
 
         if not self.training:
             res.span_clusters = self.sp.predict(doc, words, res.word_clusters)

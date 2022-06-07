@@ -32,7 +32,8 @@ class AnaphoricityScorer(torch.nn.Module):
                 top_indices_batch: torch.Tensor,
                 top_rough_scores_batch: torch.Tensor,
                 window_start: int,
-                window_end: int
+                window_end: int,
+                eval_only: bool = False
                 ) -> torch.Tensor:
         """ Builds a pairwise matrix, scores the pairs and returns the scores.
 
@@ -54,7 +55,8 @@ class AnaphoricityScorer(torch.nn.Module):
             pw_batch,
             top_indices_batch,
             window_start,
-            window_end
+            window_end,
+            eval_only
         )
 
         # [batch_size, n_ants]
@@ -82,7 +84,8 @@ class AnaphoricityScorer(torch.nn.Module):
                          pw_batch: torch.Tensor,
                          top_indices_batch: torch.Tensor,
                          windows_start: int,
-                         window_end: int
+                         window_end: int,
+                         eval_only: bool
                          ) -> torch.Tensor:
         """
         Builds the matrix used as input for AnaphoricityScorer.
@@ -107,7 +110,10 @@ class AnaphoricityScorer(torch.nn.Module):
         n_ants = pw_batch.shape[1]
 
         a_mentions = mentions_batch.unsqueeze(1).expand(-1, n_ants, emb_size)
-        window_indices = top_indices_batch[windows_start:window_end].clone()
+        if not eval_only:
+            window_indices = top_indices_batch[windows_start:window_end].clone()
+        else:
+            window_indices = top_indices_batch[windows_start:window_end]
         b_mentions = all_mentions[window_indices]
 
         # print("==================")
