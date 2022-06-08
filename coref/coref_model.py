@@ -467,11 +467,9 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
 
         # print("Result:", res.coref_scores.shape)
 
-        res.coref_y = self._get_ground_truth(
-            cluster_ids, top_indices, (top_rough_scores > float("-inf")))
+        res.coref_y = self._get_ground_truth(cluster_ids, top_indices, (top_rough_scores > float("-inf")))
         res.word_clusters = self._clusterize(doc, res.coref_scores,
                                              top_indices)
-        res.span_scores, res.span_y = self.sp.get_training_data(doc, words)
 
         top_rough_scores = None
         top_indices = None
@@ -484,7 +482,43 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
         torch.cuda.empty_cache()
 
         if not self.training:
-            res.span_clusters = self.sp.predict(doc, words, res.word_clusters)
+            res.span_scores = None
+            res.span_y = None
+            res.span_clusters = None
+
+            start_id = 0
+            end_id = min(len(doc["sent_id"]), 512)
+            end_sent = doc["sent_id"][end_id]
+            while start_id < len(doc["sent_id"]):
+                prev_end_id = end_id
+                for idx, s_id in enumerate(doc["sent_id"][prev_end_id:]):
+                    if s_id != end_sent:
+                        break
+                    end_id = prev_end_id + idx
+                # print(start_id, end_id)
+
+                window_span_scores, window_span_y = self.sp.get_training_data(doc, words, start_id, end_id + 1)
+                window_span_clusters = self.sp.predict(doc, words, res.word_clusters, start_id, end_id + 1)
+
+                if res.span_scores is None:
+                    res.span_scores = [window_span_scores.to(torch.device("cpu"))]
+                else:
+                    res.span_scores.append(window_span_scores.to(torch.device("cpu")))
+
+                if res.span_y is None:
+                    res.span_y = [(window_span_y[0].to(torch.device("cpu")), window_span_y[1].to(torch.device("cpu")))]
+                else:
+                    res.span_y.append(
+                        (window_span_y[0].to(torch.device("cpu")), window_span_y[1].to(torch.device("cpu")))
+                    )
+
+                if res.span_clusters is None:
+                    res.span_clusters = window_span_clusters
+                else:
+                    res.span_clusters += window_span_clusters
+
+                start_id = end_id + 1
+                end_id = min(len(doc["sent_id"]) - 1, start_id + 512)
 
         return res
 
@@ -663,6 +697,7 @@ class CorefModel:  # pylint: disable=too-many-instance-attributes
                     stack.extend(link for link in current_node.links if not link.visited)
                 assert len(cluster) > 1
                 clusters.append(sorted(cluster))
+
         return sorted(clusters)
 
     def _get_docs(self, path: str) -> List[Doc]:
